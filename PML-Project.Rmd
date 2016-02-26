@@ -1,0 +1,66 @@
+# Predicting People's Exercise Manner by Using Practical Machine Learning
+## by Gabegao
+
+*Summary:*
+The goal of this study is to predict the manner in which a person did his/her exercise, i.e. how well a person does the exercise. The prediction model is derived based on data from accelerometers on the belt, forearm, arm and dumbell of 6 participants. Due to the quality of the data, some filtering/cleaning steps are conducted. The training data are also partitioned to conduct cross validation. Finally, the prediction model is applied to test data and the results are resonable.
+
+1. Loading data
+```{r, results='hide'}
+train<-read.csv("pml-training.csv", header=TRUE, sep=",")
+test<-read.csv("pml-testing.csv", header=TRUE, sep=",")
+names(train)
+head(train)
+```
+Based there are 160 variables and lots of them have NA values, so our next step is to remove those NAs. Also, we need to remove the variables with near zero variance.
+
+2. Cleaning data
+```{r}
+# Remove variables with NA values
+temp<-colSums(is.na(train))
+table(temp)
+# Keep only the 93 variables with non-NA values
+train2 <- train[, temp==0]
+# Remove variables with near zero variance
+library(caret)
+NZV <- nearZeroVar(train2, saveMetrics=TRUE)
+Var<- names(train2)[NZV$nzv==FALSE]
+train2 <- subset(train2, select=Var)
+# Remove other irrelevant variables:
+# X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, num_window
+train2 <- train2[,-c(1:6)]
+```
+After the cleaning and filtering, there are 53 meaningful variables remained and the filtered data set is named as "train2".
+
+3. Practical Machine Learning model
+```{r, results='hide'}
+library(caret)
+# Partition data for cross validation
+inTrain<- createDataPartition(y=train2$classe, p=0.75, list=FALSE)
+training<- train2[inTrain,]
+testing<- train2[-inTrain,]
+dim(training)
+dim(testing)
+# Try a couple of machine learning models
+set.seed(1234)
+mod1<- train(classe~., method="rpart", data=training)
+mod2<- train(classe~., method="rf", data=training)
+mod3<- train(classe~., method="lda", data=training)
+mod4<- train(classe~., method="gbm", data=training)
+pred1<-predict(mod1, testing)
+pred2<-predict(mod2, testing)
+pred3<-predict(mod3, testing)
+pred4<-predict(mod4, testing)
+# Compare models accuracy and select the best one
+confusionMatrix(testing$classe, pred1)$overall['Accuracy']
+confusionMatrix(testing$classe, pred2)$overall['Accuracy']
+confusionMatrix(testing$classe, pred3)$overall['Accuracy']
+confusionMatrix(testing$classe, pred4)$overall['Accuracy']
+```
+Based on the results, the random forest model has the highest accuracy rate 0.9942904, following by the gradient boosting model (accuracy rate=0.9679853), then Latent Dirichlet Allocation (accuracy rate=0.7165579) and finally the rpartition model(accuracy rate=0.4930669). So we will select the random forest model as our final prediction model.
+
+4. Apply selected model to test data
+```{r}
+confusionMatrix(testing$classe, pred2)
+result<- predict(mod2, newdata=test)
+data.frame(test$user_name, result)
+table(result)
